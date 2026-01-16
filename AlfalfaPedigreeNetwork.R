@@ -1,21 +1,23 @@
 # ==============================================================================
-# Alfalfa Pedigree Network - Publication Ready Version (igraph)
+# Alfalfa Pedigree Network - Final Optimized Edition
+# 核心特征：强制显示Name，超宽布局防拥挤，亲本在顶部
 # ==============================================================================
 
-# 1. 加载必要的包 --------------------------------------------------------------
+# 1. 加载包 --------------------------------------------------------------------
 if (!requireNamespace("igraph", quietly = TRUE)) install.packages("igraph")
-if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales") # 用于坐标拉伸
+if (!requireNamespace("scales", quietly = TRUE)) install.packages("scales")
+if (!requireNamespace("stringr", quietly = TRUE)) install.packages("stringr")
 library(igraph)
 library(dplyr)
 library(stringr)
 library(scales)
 
-# 2. 数据加载与深度清洗 --------------------------------------------------------
+# 2. 数据加载与清洗 ------------------------------------------------------------
 if (!exists("ped_data")) stop("错误：请先加载数据到变量 'ped_data'")
 
 # 创建输出目录
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-out_dir <- paste0("Pedigree_Pub_", timestamp)
+out_dir <- paste0("Pedigree_FinalPlot_", timestamp)
 dir.create(out_dir)
 
 df <- ped_data
@@ -24,10 +26,10 @@ df <- ped_data
 expected_cols <- c("ID", "Father", "Mother", "Generation", "Cross_Code", "Name")
 if(ncol(df) >= 6) colnames(df)[1:6] <- expected_cols
 
-# 清洗函数：去空格，转NA
+# 清洗函数
 clean_val <- function(x) {
   x <- as.character(x)
-  x <- str_trim(x)
+  x <- str_trim(x) # 去空格
   x[x %in% c("Unknown", "unknown", "", " ", "NA", NA)] <- NA
   return(x)
 }
@@ -40,114 +42,174 @@ df$Name   <- clean_val(df$Name)
 # 移除空行
 df <- df[!is.na(df$ID) & df$ID != "", ]
 
-# 3. 构建节点与边 (Nodes & Edges) ----------------------------------------------
+# 3. 构建图数据 ----------------------------------------------------------------
 message("正在构建系谱网络...")
 
-# (A) 节点表 (Nodes) - 包含所有出现的个体
+# (A) 节点表
 all_ids <- unique(c(df$ID, na.omit(df$Father), na.omit(df$Mother)))
 nodes <- data.frame(id = all_ids, stringsAsFactors = FALSE)
+nodes <- nodes %>% left_join(df %>% select(ID, Name, Cross_Code, Generation), by = c("id" = "ID"))
 
-# 关联属性 (Name, Cross_Code)
-# 注意：使用 left_join 确保 ID 匹配
-nodes <- nodes %>%
-  left_join(df %>% select(ID, Name, Cross_Code), by = c("id" = "ID"))
-
-# (B) 关键：标签逻辑 (Label Logic)
-# 优先用 Name，如果没有 Name (比如自动补全的祖先)，则尝试用 ID
-# 再次清洗 Name，防止全是空格的情况
+# (B) 标签逻辑 (强制使用 Name)
+# 如果 Name 为空，才使用 ID；否则一律使用 Name
 nodes$Name <- clean_val(nodes$Name)
 nodes$Label <- ifelse(!is.na(nodes$Name), nodes$Name, nodes$id)
 
-# 缺失的 Cross_Code 默认为 GP (基础亲本)
+# 默认属性填充
 nodes$Cross_Code[is.na(nodes$Cross_Code)] <- "GP"
 
-# (C) 边表 (Edges)
-edges_father <- df %>% filter(!is.na(Father)) %>% select(Father, ID) %>% rename(from=Father, to=ID)
-edges_mother <- df %>% filter(!is.na(Mother)) %>% select(Mother, ID) %>% rename(from=Mother, to=ID)
-edges <- rbind(edges_father, edges_mother)
+# (C) 代次解析 (用于分层)
+# 从 "G0", "G3", "CG1" 中提取数字
+extract_gen <- function(x) {
+  num <- as.numeric(str_extract(x, "\\d+"))
+  if(is.na(num)) return(0) # 无法解析的默认为0
+  return(num)
+}
+# 如果数据中有Generation列，使用它；否则全为0(依赖自动布局)
+if("Generation" %in% colnames(nodes)) {
+  nodes$Gen_Num <- sapply(nodes$Generation, extract_gen)
+} else {
+  nodes$Gen_Num <- 0
+}
 
-# 4. 创建图对象 (Graph Object) -------------------------------------------------
+# (D) 边表
+edges <- rbind(
+  df %>% filter(!is.na(Father)) %>% select(Father, ID) %>% rename(from=Father, to=ID),
+  df %>% filter(!is.na(Mother)) %>% select(Mother, ID) %>% rename(from=Mother, to=ID)
+)
+
+# 4. 创建图对象 ----------------------------------------------------------------
 g <- graph_from_data_frame(d = edges, vertices = nodes, directed = TRUE)
 
-# 5. 样式设置 (Aesthetics for Publication) -------------------------------------
+# 5. 视觉样式设置 --------------------------------------------------------------
 
-# (A) 颜色方案 (低饱和度，适合阅读)
+# (A) 颜色 (植物学低饱和度)
 color_map <- c(
-  "GP" = "#E6AB02", # 赭黄 (基础)
-  "IC" = "#66A61E", # 绿色 (系内)
-  "BC" = "#7570B3", # 紫色 (回交)
-  "SF" = "#E7298A", # 玫红 (自交)
-  "OC" = "#A6761D"  # 褐色 (开放)
+  "GP" = "#4E79A7", # 基础亲本-蓝
+  "IC" = "#59A14F", # 系内-绿
+  "BC" = "#E15759", # 回交-红
+  "SF" = "#F28E2B", # 自交-橙
+  "OC" = "#B07AA1"  # 开放-紫
 )
-# 匹配颜色
 V(g)$color <- color_map[V(g)$Cross_Code]
-V(g)$color[is.na(V(g)$color)] <- "grey80" # 未知类型用浅灰
+V(g)$color[is.na(V(g)$color)] <- "grey80"
 
-# (B) 节点样式 (微型化)
-V(g)$frame.color <- NA         # 去除节点黑边，更清爽
-V(g)$size <- 5                 # 【关键】节点调小 (原15 -> 5)
+# (B) 节点 (微型化以防遮挡)
+# 根据代次调整大小：G0(亲本)大，子代小
+gen_norm <- nodes$Gen_Num - min(nodes$Gen_Num, na.rm=TRUE)
+max_gen <- max(gen_norm, na.rm=TRUE)
+if(max_gen > 0) {
+  # 代次越小(亲本)，节点越大
+  V(g)$size <- 5 + (6 * (max_gen - gen_norm) / max_gen)
+} else {
+  V(g)$size <- 6
+}
+# 基础亲本特权
+V(g)$size[V(g)$Cross_Code == "GP"] <- 10
+V(g)$frame.color <- NA # 无边框
 
-# (C) 标签样式 (Name)
-V(g)$label <- V(g)$Label       # 确保显示 Name
-V(g)$label.family <- "sans"    # 无衬线字体
-V(g)$label.color <- "black"    # 黑色文字
-# 动态字体大小：如果节点多，字体就小一点
-font_size <- if(length(V(g)) > 50) 0.5 else 0.7
-V(g)$label.cex <- font_size    
-V(g)$label.dist <- 0.6         # 标签稍微偏离节点中心，防止盖住颜色点
+# (C) 标签 (关键优化)
+V(g)$label <- V(g)$Label
+V(g)$label.family <- "sans"
+V(g)$label.color <- "black"
+# 字体大小：节点越多，字体越小，但有下限
+base_cex <- if(length(V(g)) > 100) 0.5 else 0.6
+V(g)$label.cex <- base_cex
 
-# (D) 连线样式
-E(g)$arrow.size <- 0.2         # 箭头极其微小，暗示方向即可
-E(g)$edge.color <- "grey60"    # 浅灰色连线，不抢眼
-E(g)$width <- 0.5              # 细线
+# 6. 布局计算 (Sugiyama 分层 + 强力拉伸) ---------------------------------------
+message("正在计算高清晰度布局...")
 
-# 6. 布局算法优化 (Layout Optimization) ----------------------------------------
-message("正在计算优化布局...")
+# 移除自交环计算布局(防止报错)
+g_layout <- simplify(g, remove.multiple = FALSE, remove.loops = TRUE)
 
-# 使用 Sugiyama 算法 (分层布局)
-lay_obj <- layout_with_sugiyama(g, attributes = "all")
-lay <- lay_obj$layout
+# 强制分层参数
+lay_params <- list(graph = g_layout, hgap = 5, vgap = 5) # 增加间距参数
+if(max_gen > 0) lay_params$layers <- nodes$Gen_Num
 
-# 【关键优化】: 拉伸布局以减少拥挤
-# Sugiyama 默认通常是垂直很长，水平很窄。我们需要横向拉开。
-# 旋转布局：通常 Sugiyama 是从上到下。
-# 我们可以手动缩放坐标轴
-lay[, 1] <- rescale(lay[, 1], to = c(-1, 1)) * 2  # 横向拉宽 2 倍
-lay[, 2] <- rescale(lay[, 2], to = c(1, -1))      # 纵向归一化 (注意：1到-1是为了让祖先在上面)
+lay <- do.call(layout_with_sugiyama, lay_params)
+coords <- lay$layout
+
+# (A) 纵向翻转检测 (确保亲本在上)
+# 检查代次与Y坐标的相关性。我们希望代次小(0)的Y值大(Top)。
+# 如果代次与Y正相关(0在下)，则需要翻转。
+if(max_gen > 0) {
+  cor_y <- cor(coords[,2], nodes$Gen_Num, use = "complete.obs")
+  if(!is.na(cor_y) && cor_y > 0) {
+    coords[,2] <- -coords[,2] # 翻转
+  }
+} else {
+  # 无代次信息时，Sugiyama通常把根放在顶部，无需操作
+}
+
+# (B) 横向强力拉伸 (解决拥挤的核心)
+# 将 X 轴范围扩大到 Y 轴范围的 2-3 倍
+ratio <- 2.5 
+coords[,1] <- rescale(coords[,1], to = c(-ratio, ratio))
+coords[,2] <- rescale(coords[,2], to = c(-1, 1))
+
+# (C) 同代节点交错抖动 (防止重叠)
+# 对每一层节点，按X坐标排序，重新均匀分布
+if(max_gen > 0) {
+  for(g_idx in unique(nodes$Gen_Num)) {
+    idx <- which(nodes$Gen_Num == g_idx)
+    if(length(idx) > 1) {
+      # 获取当前层节点的索引
+      layer_nodes <- idx
+      # 获取它们当前的X坐标
+      current_x <- coords[layer_nodes, 1]
+      # 排序
+      order_x <- order(current_x)
+      # 在区间内均匀重布
+      new_x <- seq(min(coords[,1]), max(coords[,1]), length.out = length(layer_nodes) + 2)
+      new_x <- new_x[2:(length(new_x)-1)] # 去掉头尾，留边距
+      # 赋值
+      coords[layer_nodes[order_x], 1] <- new_x
+    }
+  }
+}
 
 # 7. 绘图与导出 ----------------------------------------------------------------
-pdf_file <- file.path(out_dir, "Alfalfa_Pedigree_Pub.pdf")
+pdf_file <- file.path(out_dir, "Alfalfa_Pedigree_Clean.pdf")
 
-message("正在导出...")
+# 自动计算画布宽度：节点越多，画布越宽
+plot_width <- max(12, length(unique(nodes$Gen_Num)) * 2) 
+if(length(V(g)) > 50) plot_width <- 16
 
-# 设置 PDF 画布：宽长高短，适合宽系谱图
-# 如果觉得依然拥挤，可以尝试增加 width
-pdf(pdf_file, width = 12, height = 8)
+pdf(pdf_file, width = plot_width, height = 10)
 
-# 绘图
-plot(g, 
-     layout = lay, 
-     # 调整边界，利用每一寸空间
-     rescale = FALSE,  # 关闭自动缩放，使用我们自定义的拉伸坐标
-     xlim = range(lay[,1]), 
-     ylim = range(lay[,2]),
-     margin = c(0,0,0,0), # 无边距
-     main = "" # 去除标题，留给论文排版
+# 设置边距
+par(mar = c(1, 1, 1, 1))
+
+plot(g,
+     layout = coords,
+     rescale = FALSE, # 关键：禁止自动压缩
+     xlim = range(coords[,1]) * 1.05,
+     ylim = range(coords[,2]) * 1.05,
+     
+     # 标签位置：垂直排列 (竖排) 或者 旋转放置
+     # 这里采用：在节点下方垂直放置，互不干扰
+     vertex.label.dist = 0.8,    # 标签离节点远一点
+     vertex.label.degree = -pi/2, # 纯垂直下方 (-90度方向)
+     
+     # 连线优化
+     edge.arrow.size = 0.3,
+     edge.color = "grey70",
+     edge.curved = 0.3, # 增加曲线度，绕过中间节点
+     
+     main = "紫花苜蓿育种系谱图"
 )
 
-# 添加图例 (精简版)
-legend("topleft", 
-       legend = names(color_map), 
-       col = color_map, 
-       pch = 19,       # 实心圆点
-       pt.cex = 1.2, 
-       bty = "n",      # 无边框
-       cex = 0.8,
-       title = "Breeding Type",
-       inset = c(0.02, 0.02)
-)
+# 简单的代次指示
+min_x <- min(coords[,1])
+max_y <- max(coords[,2])
+min_y <- min(coords[,2])
+text(x = min_x, y = max_y, labels = "Parents (G0)", pos = 4, col = "grey50", cex = 0.8)
+text(x = min_x, y = min_y, labels = "Progeny", pos = 4, col = "grey50", cex = 0.8)
+
+# 图例
+legend("topright", legend = names(color_map), col = color_map, pch = 19, pt.cex = 1.5, bty = "n", cex = 0.8)
 
 dev.off()
 
-message(paste("出版级矢量图已生成:", pdf_file))
-message("提示：如果依然觉得拥挤，请在代码中增加 'pdf(..., width = 15)' 的宽度值。")
+message(paste("优化完成！高清PDF已保存至:", pdf_file))
+message("提示：标签已强制设为Name，并位于节点正下方。")
