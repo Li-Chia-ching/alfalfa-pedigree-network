@@ -1,71 +1,206 @@
-# Alfalfa Pedigree Network Visualization
+# README: Alfalfa Pedigree Network Visualization Tool
 
-A modern, publication‑ready R pipeline for generating clean and informative pedigree network diagrams from alfalfa breeding data. Built with `igraph`, this tool transforms tabular pedigree records into a structured, visually refined directed graph optimized for academic papers and presentations.
+## Overview / 概述
 
-**苜蓿系譜網絡可視化 – 出版級繪圖工具 (igraph)**
+This tool creates publication-ready pedigree network visualizations for alfalfa breeding programs. It generates clean, professional pedigree diagrams that clearly display parent-progeny relationships with minimal label overlap.
 
-本儲存庫提供了一個 R 腳本管道，用於為苜蓿育種計畫生成清晰、符合出版品質的系譜網絡圖。基於 `igraph` 構建，該腳本將原始系譜資料（ID、父本、母本、世代、雜交代碼、名稱）轉換為有向圖，應用適合學術論文的精緻視覺風格，並輸出高解析度 PDF。
+该工具为苜蓿育种程序创建可直接用于出版物的亲缘关系网络可视化。它能生成清晰、专业的系谱图，以最小的标签重叠清晰展示亲本-子代关系。
 
-## Features
+## Key Features / 核心功能
 
-- **Automated Data Preparation**: Cleans raw pedigree data, handles missing parents, and standardizes columns.
-- **Intelligent Labeling**: Displays cultivar names when available; uses IDs for unnamed ancestors.
-- **Breeding‑Type Visual Encoding**: Distinct, low‑saturation colors for different cross types (GP, IC, BC, SF, OC).
-- **Optimized Layout**: Uses the Sugiyama layered algorithm with axis stretching to reduce node overlap and improve readability.
-- **Publication‑Ready Styling**:
-  - Minimalist design: tiny nodes, thin edges, subtle arrows.
-  - Adjustable label size based on graph density.
-  - Sans‑serif fonts, black labels, no frame borders.
-- **Self‑Contained Output**: Each run creates a timestamped folder with a high‑resolution PDF.
+### 1. **Intelligent Label Placement / 智能标签放置**
+- **Forces display of `Name` field** (falls back to `ID` only if `Name` is missing)
+- **Labels placed directly below nodes** for maximum readability
+- **Auto-adjusted font size** based on node count to prevent crowding
 
-主要功能包括：
-- **自動化資料清洗**：處理缺失/未知親本、去除空格、統一欄位名稱。
-- **智能標籤**：優先使用「名稱」欄位，無名稱的祖先則以 ID 顯示。
-- **育種類型顏色編碼**：可自訂的低飽和度配色，對應不同的雜交代碼（GP、IC、BC、SF、OC）。
-- **優化佈局**：採用 Sugiyama 分層演算法，拉伸座標以減少節點擁擠、提升可讀性。
-- **出版級樣式**：微小節點、細微箭頭、淺灰色連線、無襯線字體標籤及精簡圖例。
-- **獨立輸出**：每次執行會建立帶時間戳記的資料夾，存放生成的 PDF。
+- **强制显示`Name`字段**（仅在`Name`缺失时才使用`ID`）
+- **标签直接放在节点下方**，确保最佳可读性
+- **基于节点数量自动调整字体大小**，防止拥挤
 
-本程式碼注重清晰度與可重現性，特別適合需要將複雜系譜關係可視化，並符合期刊投稿圖表格式的植物育種家與遺傳學研究人員使用。
+### 2. **Botanical Layout Conventions / 植物学布局规范**
+- **Parents at top, progeny at bottom** (Generation values increase downward)
+- **Wide horizontal stretching** to maximize label spacing
+- **Within-generation node alignment** to create organized layers
 
-## Dependencies
+- **亲本在上，子代在下**（代次值向下递增）
+- **大幅水平拉伸**以最大化标签间距
+- **同代次节点对齐**，形成有组织的层级
 
-The script requires the following R packages:
+### 3. **Visual Design / 视觉设计**
+- **Low-saturation botanical color scheme** suitable for publication
+- **Node size indicates generation** (founders/larger, recent generations/smaller)
+- **Clean lines with minimal visual clutter**
 
-| Package | Purpose | Installation |
-|---------|---------|--------------|
-| [`igraph`](https://igraph.org/r/) | Graph construction, layout algorithms, and visualization core. | `install.packages("igraph")` |
-| [`dplyr`](https://dplyr.tidyverse.org/) | Data manipulation and joining for node/edge tables. | `install.packages("dplyr")` |
-| [`stringr`](https://stringr.tidyverse.org/) | String cleaning and whitespace trimming. | `install.packages("stringr")` |
-| [`scales`](https://scales.r-lib.org/) | Axis rescaling to stretch the layout for better spacing. | `install.packages("scales")` |
+- **适合出版物的低饱和度植物学配色方案**
+- **节点大小表示代次**（基础亲本较大，近期代次较小）
+- **简洁线条，视觉干扰最小化**
 
-All packages are available on CRAN.
+## Data Requirements / 数据要求
 
-## Quick Start
+### Required Columns / 必需列
+- **`ID`**: Unique identifier for each individual
+- **`Father`**: ID of the male parent (use `NA` for unknown)
+- **`Mother`**: ID of the female parent (use `NA` for unknown)
+- **`Generation`**: Generation number (e.g., "G0", "G1", "G2")
+- **`Cross_Code`**: Breeding type code (GP, IC, BC, SF, OC)
+- **`Name`**: Display name for each individual
 
-1. **Prepare your data** as a dataframe (`ped_data`) with at least these columns (order‑sensitive):
-   - `ID`, `Father`, `Mother`, `Generation`, `Cross_Code`, `Name`
+### Data Cleaning / 数据清洗
+The script automatically:
+- Removes whitespace and standardizes missing values
+- Handles "Unknown" and similar placeholders
+- Ensures all parents are included as nodes even if not in original data
 
-2. **Run the script**:
-   ```r
-   source("alfalfa_pedigree_pub.R")
-   ```
+脚本自动：
+- 删除空格并标准化缺失值
+- 处理"Unknown"及类似占位符
+- 确保所有亲本都作为节点包含，即使未出现在原始数据中
 
-3. **Find the output** inside a newly created folder named `Pedigree_Pub_YYYYMMDD_HHMMSS/` containing `Alfalfa_Pedigree_Pub.pdf`.
+## Installation & Usage / 安装与使用
 
-## Customization
+### 1. Load Required Packages / 加载必需包
+```r
+# Install if not already installed
+install.packages(c("igraph", "dplyr", "stringr", "scales"))
 
-- **Colors**: Modify the `color_map` vector in section 5(A) to change breeding‑type colors.
-- **Node size**: Adjust `V(g)$size` (currently 5).
-- **PDF dimensions**: Change `width` and `height` in the `pdf()` call (currently 12×8 inches).
-- **Layout stretching**: Tweak the multiplier in `lay[, 1] <- rescale(...) * 2` to control horizontal spread.
+# Load libraries
+library(igraph)
+library(dplyr)
+library(stringr)
+library(scales)
+```
 
-## Notes
+### 2. Prepare Your Data / 准备数据
+```r
+# Load your pedigree data
+ped_data <- read.csv("your_pedigree_file.csv")  # or read.xlsx, etc.
 
-- The script assumes your data is loaded into a variable named `ped_data`. Modify the loading step if needed.
-- If the graph remains crowded, increase the `width` argument in the `pdf()` function (e.g., `width = 15`).
-- The output PDF is vector‑based and can be directly imported into illustration software (Adobe Illustrator, Inkscape) for further refinements.
+# Ensure column names match expected format:
+# Expected columns: ID, Father, Mother, Generation, Cross_Code, Name
+```
 
-## License
+### 3. Run the Script / 运行脚本
+```r
+# Source the script
+source("alfalfa_pedigree_network.R")
 
-MIT License. Feel free to adapt for other crops or pedigree structures.
+# Or copy the entire script into your R session
+```
+
+## Output Files / 输出文件
+
+The script generates two files in a timestamped directory:
+
+脚本在带时间戳的目录中生成两个文件：
+
+1. **`Alfalfa_Pedigree_Clean.pdf`** - High-resolution vector PDF for publication
+   - **高分辨率矢量PDF文件**，适用于出版物
+
+2. **Directory naming convention**: `Pedigree_FinalPlot_YYYYMMDD_HHMMSS/`
+   - **目录命名规则**: `Pedigree_FinalPlot_年月日_时分秒/`
+
+## Customization Options / 自定义选项
+
+### Color Scheme / 配色方案
+```r
+# Modify the color_map variable to change colors:
+color_map <- c(
+  "GP" = "#4E79A7", # Foundation parents / 基础亲本
+  "IC" = "#59A14F", # Inbred crosses / 系内杂交
+  "BC" = "#E15759", # Backcrosses / 回交
+  "SF" = "#F28E2B", # Selfing / 自交
+  "OC" = "#B07AA1"  # Open crosses / 开放杂交
+)
+```
+
+### Layout Adjustments / 布局调整
+```r
+# Adjust horizontal stretching (higher = more spread out)
+ratio <- 2.5  # Current value / 当前值
+
+# Modify node sizing formula:
+V(g)$size <- 5 + (6 * (max_gen - gen_norm) / max_gen)
+```
+
+### Label Configuration / 标签配置
+```r
+# Change label positioning:
+vertex.label.dist = 0.8,    # Distance from node / 标签与节点的距离
+vertex.label.degree = -pi/2 # Label angle / 标签角度 (-90° = below)
+```
+
+## Troubleshooting / 故障排除
+
+### Common Issues / 常见问题
+
+| Issue / 问题 | Solution / 解决方案 |
+|--------------|---------------------|
+| **"Error: please load data to variable 'ped_data'"** | Ensure your data is loaded and named exactly `ped_data` |
+| **Labels still overlapping** | Increase `plot_width` (currently auto-calculated) or decrease `base_cex` |
+| **Graph looks too compressed** | Increase the `ratio` parameter in the layout stretching section |
+| **Missing parents in visualization** | Check that parent IDs match exactly with child's Father/Mother values |
+| **颜色显示不正确** | 检查Cross_Code列是否包含GP, IC, BC, SF, OC之外的值 |
+
+## Advanced Features / 高级功能
+
+### Generation Extraction / 代次提取
+The script automatically extracts generation numbers from various formats:
+- "G0", "G1", "G2" → 0, 1, 2
+- "CG1", "CG2" → 1, 2
+- Any string containing numbers
+
+脚本自动从各种格式中提取代次数字：
+- "G0", "G1", "G2" → 0, 1, 2
+- "CG1", "CG2" → 1, 2
+- 任何包含数字的字符串
+
+### Intelligent Node Sizing / 智能节点大小调整
+- Foundation parents (GP): Largest nodes (size = 10)
+- Early generations: Medium-sized nodes
+- Recent generations: Smaller nodes (minimum size = 5)
+
+- 基础亲本(GP): 最大节点 (大小 = 10)
+- 早期代次: 中等大小节点
+- 近期代次: 较小节点 (最小大小 = 5)
+
+## Example Output / 示例输出
+
+A successful run will produce:
+- A clean pedigree network with parents at the top
+- All individuals labeled by their `Name` field
+- Color-coded by breeding type
+- Organized in generational layers
+
+成功运行将生成：
+- 亲本在顶部的清晰系谱网络
+- 所有个体按其`Name`字段标记
+- 按育种类型颜色编码
+- 按代次层级组织
+
+## Citation / 引用
+
+If you use this tool in your research, please cite:
+- **Tool**: "Alfalfa Pedigree Network Visualization Tool"
+- **R packages**: Csardi & Nepusz (2006) for igraph; Wickham et al. (2023) for dplyr
+
+如果您在研究中使用此工具，请引用：
+- **工具**: "苜蓿系谱网络可视化工具"
+- **R包**: Csardi & Nepusz (2006) 的igraph; Wickham et al. (2023) 的dplyr
+
+## Contact & Support / 联系与支持
+
+For questions, suggestions, or bug reports:
+- Check the script comments for parameter explanations
+- Review the data format requirements above
+- Ensure all required columns are present and properly formatted
+
+如有问题、建议或错误报告：
+- 查看脚本注释中的参数解释
+- 检查上述数据格式要求
+- 确保所有必需列都存在且格式正确
+
+---
+
+**Last Updated**: 2025  
+**Version**: Final Optimized Edition  
+**Compatibility**: R 4.5.2, Windows/macOS/Linux
